@@ -55,24 +55,6 @@ CORES=`cat /proc/cpuinfo | grep -c processor`
 CLANG_DIR=$PWD/toolchain/neutron_18
 PATH=$CLANG_DIR/bin:$PATH
 
-# Check if toolchain exists
-if [ ! -f "$CLANG_DIR/bin/clang-18" ]; then
-    echo "-----------------------------------------------"
-    echo "Toolchain not found! Downloading..."
-    echo "-----------------------------------------------"
-    rm -rf $CLANG_DIR
-    mkdir -p $CLANG_DIR
-    pushd toolchain/neutron_18 > /dev/null
-    bash <(curl -s "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman") -S=05012024
-    echo "-----------------------------------------------"
-    echo "Patching toolchain..."
-    echo "-----------------------------------------------"
-    bash <(curl -s "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman") --patch=glibc
-    echo "-----------------------------------------------"
-    echo "Cleaning up..."
-    popd > /dev/null
-fi
-
 # Apply KSU patch for FBE support
 # Else it'll lose allowlist on reboot
 # Source patch: https://github.com/Unb0rn/android_kernel_samsung_exynos9820/commit/e424dac6ce3f99e128aaabb0711d69adf4079c77
@@ -145,7 +127,6 @@ if [[ "$KSU_OPTION" == "y" ]]; then
 fi
 
 rm -rf arch/arm64/configs/temp_defconfig
-rm -rf build/out/$MODEL
 mkdir -p build/out/$MODEL/zip/files
 mkdir -p build/out/$MODEL/zip/META-INF/com/google/android
 
@@ -167,7 +148,7 @@ echo "-----------------------------------------------"
 echo "Building kernel using "$KERNEL_DEFCONFIG""
 echo "Generating configuration file..."
 echo "-----------------------------------------------"
-make ${MAKE_ARGS} -j$CORES $KERNEL_DEFCONFIG extreme.config $RECOVERY $KSU || abort
+#make ${MAKE_ARGS} -j$CORES $KERNEL_DEFCONFIG extreme.config $RECOVERY $KSU || abort
 
 echo "Building kernel..."
 echo "-----------------------------------------------"
@@ -195,30 +176,12 @@ OUTPUT_FILE=build/out/$MODEL/boot.img
 # Copy kernel to build
 cp out/arch/arm64/boot/Image build/out/$MODEL
 
-# Build dtb
-echo "Building common exynos9830 Device Tree Blob Image..."
-echo "-----------------------------------------------"
-./toolchain/mkdtimg cfg_create build/out/$MODEL/dtb.img build/dtconfigs/exynos9830.cfg -d out/arch/arm64/boot/dts/exynos
-
-# Build dtbo
-echo "Building Device Tree Blob Output Image for "$MODEL"..."
-echo "-----------------------------------------------"
-./toolchain/mkdtimg cfg_create build/out/$MODEL/dtbo.img build/dtconfigs/$MODEL.cfg -d out/arch/arm64/boot/dts/samsung
-
 if [ -z "$RECOVERY" ]; then
-    # Build ramdisk
-    echo "Building RAMDisk..."
-    echo "-----------------------------------------------"
-    pushd build/ramdisk > /dev/null
-     find . ! -name . | LC_ALL=C sort | cpio -o -H newc -R root:root | gzip > ../out/$MODEL/ramdisk.cpio.gz || abort
-    popd > /dev/null
-    echo "-----------------------------------------------"
-
     # Create boot image
     echo "Creating boot image..."
     echo "-----------------------------------------------"
-     ./toolchain/mkbootimg --base $BASE --board $BOARD --cmdline "$CMDLINE" --dtb $DTB_PATH \
-    --dtb_offset $DTB_OFFSET --hashtype $HASHTYPE --header_version $HEADER_VERSION --kernel $KERNEL_PATH \
+    mkbootimg --base $BASE --board $BOARD --cmdline "$CMDLINE" --dtb $DTB_PATH \
+    --dtb_offset $DTB_OFFSET --header_version $HEADER_VERSION --kernel $KERNEL_PATH \
     --kernel_offset $KERNEL_OFFSET --os_patch_level $OS_PATCH_LEVEL --os_version $OS_VERSION --pagesize $PAGESIZE \
     --ramdisk $RAMDISK --ramdisk_offset $RAMDISK_OFFSET \
     --second_offset $SECOND_OFFSET --tags_offset $TAGS_OFFSET -o $OUTPUT_FILE || abort
@@ -227,22 +190,6 @@ if [ -z "$RECOVERY" ]; then
     echo "Building zip..."
     echo "-----------------------------------------------"
     cp build/out/$MODEL/boot.img build/out/$MODEL/zip/files/boot.img
-    cp build/out/$MODEL/dtbo.img build/out/$MODEL/zip/files/dtbo.img
-    cp build/update-binary build/out/$MODEL/zip/META-INF/com/google/android/update-binary
-    cp build/updater-script build/out/$MODEL/zip/META-INF/com/google/android/updater-script
-
-    version=$(grep -o 'CONFIG_LOCALVERSION="[^"]*"' arch/arm64/configs/extreme.config | cut -d '"' -f 2)
-    version=${version:1}
-    pushd build/out/$MODEL/zip > /dev/null
-    DATE=`date +"%d-%m-%Y_%H-%M-%S"`
-
-    if [[ "$KSU_OPTION" == "y" ]]; then
-        NAME="$version"_"$MODEL"_UNOFFICIAL_KSU_"$DATE".zip
-    else
-        NAME="$version"_"$MODEL"_UNOFFICIAL_"$DATE".zip
-    fi
-    zip -r -qq ../"$NAME" .
-    popd > /dev/null
 fi
 
 popd > /dev/null

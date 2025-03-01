@@ -69,7 +69,6 @@ class ELF:
     def __init__(self, elf_file, readelf_path="readelf"):
         self.__elf_file = elf_file
         self.utils = Utils()
-        self.__readelf_path = readelf_path
         self.__sections = OrderedDict()
         self.__symbols = OrderedDict()
         self.__relocs = list()
@@ -83,7 +82,7 @@ class ELF:
         :param options readelf options: ["opt1", "opt2", "opt3", ..., "optN"]
         :returns raw output
         """
-        ret = subprocess.Popen(args=[self.__readelf_path] + options,
+        ret = subprocess.Popen(args=["readelf"] + options,
                                stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE)
         stdout, stderr = ret.communicate()
